@@ -60,6 +60,22 @@ async function startServer() {
     }
   });
 
+  // Mass Issues Notification Endpoint
+  app.post("/api/issues/notify", async (req, res) => {
+    const { issue, eventType } = req.body;
+    if (!issue || !eventType) {
+      return res.status(400).json({ error: "Missing issue or eventType" });
+    }
+    try {
+      const { notifyIssueTelegram } = await import("./src/server/issueNotifier.ts");
+      await notifyIssueTelegram(issue, eventType);
+      res.json({ success: true });
+    } catch (e: any) {
+      console.error("Error in /api/issues/notify:", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // Vite middleware for development
   let useVite = false;
   if (process.env.NODE_ENV !== "production") {

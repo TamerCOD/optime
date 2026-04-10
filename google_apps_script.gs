@@ -266,12 +266,18 @@ function formatTelegramMessage(data) {
     return `🔔 <b>ТЕСТ СВЯЗИ</b>\n\nСистема успешно подключена к Telegram.\nКанал связи: <code>Stable</code>`;
   }
 
+  const isClosed = data.status === 'resolved' || data.eventType === 'auto_end';
+
+  if (isClosed) {
+    let msg = `<u><b>ИНЦИДЕНТ ЗАКРЫТ</b></u>\n\n`;
+    msg += `📝 <b>Детали:</b>\n<pre>${data.description || 'Инцидент успешно устранен.'}</pre>\n`;
+    return msg;
+  }
+
   // Определение иконки и заголовка статуса
   let statusIcon = "ℹ️"; 
   
   if (data.eventType === 'auto_start') statusIcon = "⚠️"; 
-  else if (data.eventType === 'auto_end') statusIcon = "🏁"; 
-  else if (data.status === 'resolved') statusIcon = "✅"; 
   else if (data.status === 'scheduled') statusIcon = "🗓";
   else if (data.severity === 'critical') statusIcon = "🚨";
   else if (data.severity === 'major') statusIcon = "🟠";
@@ -294,21 +300,15 @@ function formatTelegramMessage(data) {
   const titleUpper = (data.title || "БЕЗ ЗАГОЛОВКА").toUpperCase();
   msg += `<u><b>${statusIcon} ${titleUpper}</b></u>\n`;
   
-  if (data.status === 'resolved' || data.eventType === 'auto_end') {
-      msg += `<b>✅ ИНЦИДЕНТ ЗАВЕРШЕН</b>\n\n`;
-  } else {
-      // 2. СЕРЬЕЗНОСТЬ и КАТЕГОРИЯ: Жирный (Под заголовком)
-      msg += `<b>${severityStr} | ${(data.category || "ОБЩЕЕ").toUpperCase()}</b>\n\n`;
-  }
+  // 2. СЕРЬЕЗНОСТЬ и КАТЕГОРИЯ: Жирный (Под заголовком)
+  msg += `<b>${severityStr} | ${(data.category || "ОБЩЕЕ").toUpperCase()}</b>\n\n`;
 
   // 3. ID: Моноширинный выделенный
   msg += `🆔 ID: <code>${data.readableId}</code>\n`;
 
   // 4. ДАТЫ
   msg += `🕒 Начало: ${formatD(data.scheduledStart)}\n`;
-  if (data.status === 'resolved' || data.eventType === 'auto_end') {
-      msg += `🏁 Завершено: ${formatD(data.resolvedAt || new Date())}\n`;
-  } else if (data.scheduledEnd) {
+  if (data.scheduledEnd) {
       msg += `⏳ План. устр.: ${formatD(data.scheduledEnd)}\n`;
   }
 
