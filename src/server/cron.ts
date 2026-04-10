@@ -31,7 +31,7 @@ async function authenticateBot() {
   }
 }
 
-export async function sendTelegramMessage(botToken: string, chatId: string, text: string, threadId?: string, photoUrl?: string | string[], replyMarkup?: any) {
+export async function sendTelegramMessage(botToken: string, chatId: string, text: string, threadId?: string, photoUrl?: string | string[], replyMarkup?: any, replyToMessageId?: string) {
   try {
     const cleanBotToken = botToken.trim();
     const cleanChatId = chatId.trim();
@@ -50,6 +50,9 @@ export async function sendTelegramMessage(botToken: string, chatId: string, text
       };
       if (threadId && threadId.toString().trim() !== '') {
         body.message_thread_id = threadId.toString().trim();
+      }
+      if (replyToMessageId) {
+        body.reply_to_message_id = parseInt(replyToMessageId);
       }
 
       const response = await fetch(`https://api.telegram.org/bot${cleanBotToken}/sendMediaGroup`, {
@@ -72,6 +75,9 @@ export async function sendTelegramMessage(botToken: string, chatId: string, text
         if (threadId && threadId.toString().trim() !== '') {
           markupBody.message_thread_id = threadId.toString().trim();
         }
+        if (replyToMessageId) {
+          markupBody.reply_to_message_id = parseInt(replyToMessageId);
+        }
         await fetch(`https://api.telegram.org/bot${cleanBotToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -89,6 +95,9 @@ export async function sendTelegramMessage(botToken: string, chatId: string, text
       }
       if (replyMarkup) {
         body.reply_markup = replyMarkup;
+      }
+      if (replyToMessageId) {
+        body.reply_to_message_id = parseInt(replyToMessageId);
       }
 
       let endpoint = `https://api.telegram.org/bot${cleanBotToken}/sendMessage`;
@@ -112,7 +121,8 @@ export async function sendTelegramMessage(botToken: string, chatId: string, text
         console.error("Telegram API Error:", data);
         return { success: false, error: data };
       }
-      return { success: true };
+      const data = await response.json();
+      return { success: true, messageId: data.result?.message_id };
     }
   } catch (e: any) {
     console.error("Error sending telegram message from cron:", e);

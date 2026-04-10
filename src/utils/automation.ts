@@ -24,11 +24,6 @@ export const runIssueAutomation = async (cachedSettings?: any) => {
   try {
     const now = new Date();
 
-    // 1. Settings
-    const settings = cachedSettings || ({} as IssueSettings);
-    const sheetUrl = settings?.googleSheetUrl;
-    const globalRecipient = settings?.email?.enabled ? settings.email.recipient : null;
-
     // 2. Query candidates (only non-resolved)
     if (!isCacheInitialized) {
         await initCache();
@@ -114,8 +109,7 @@ export const runIssueAutomation = async (cachedSettings?: any) => {
                     ...issue, 
                     id: issueId,
                     ...updates,
-                    eventType: eventType, 
-                    emailRecipient: (issue.notifyEmail && globalRecipient) ? globalRecipient : null
+                    eventType: eventType
                 };
             }
             return null;
@@ -127,15 +121,18 @@ export const runIssueAutomation = async (cachedSettings?: any) => {
         }
     }
 
-    if (count > 0 && sheetUrl) {
+    if (count > 0) {
         // Отправляем уведомления только после успешного завершения всех транзакций
+        const baseUrl = typeof window !== 'undefined' ? '' : `http://localhost:${process.env.PORT || 3000}`;
         for (const payload of results) {
             try {
-                await fetch(sheetUrl, {
+                await fetch(`${baseUrl}/api/issues/notify`, {
                     method: 'POST', 
-                    mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({
+                        issue: payload,
+                        eventType: payload.eventType
+                    })
                 });
             } catch (e) { 
                 console.error("Webhook Error:", e); 

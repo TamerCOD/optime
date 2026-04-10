@@ -437,7 +437,6 @@ export interface MassIssue {
   scheduledEnd?: string;
   resolvedAt?: string;
   notifyTelegram: boolean;
-  notifyEmail?: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -453,7 +452,8 @@ export interface MassIssue {
     level4?: string;
     level5?: string;
   };
-  telegramMessageId?: string;
+  telegramMessageId?: string; // Legacy
+  telegramMessageIds?: Record<string, string>; // Map of chatId to messageId
 }
 
 export interface SeverityDefinition {
@@ -471,14 +471,9 @@ export interface IssueSettings {
   cascadeData?: CascadeNode[];
   severities?: SeverityDefinition[]; // New dynamic severities
 
-  googleSheetUrl: string;
   telegram: {
     botToken: string;
-    chatIds: string[];
-  };
-  email?: {
-    enabled: boolean;
-    recipient: string;
+    chats: { chatId: string; threadId: string }[];
   };
 }
 

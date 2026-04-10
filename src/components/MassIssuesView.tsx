@@ -6,7 +6,7 @@ import {
     Edit2, Trash2, X, Calendar,
     Activity, Send, Tag, AlertOctagon, Info, Settings, Save, List, Layers, MapPin, Cpu, Table, RefreshCw,
     FileSpreadsheet, BarChart2,
-    Mail, Check, Smartphone, Download, FileText, ChevronDown, ChevronUp, UploadCloud, Briefcase, Database
+    Check, Smartphone, Download, FileText, ChevronDown, ChevronUp, UploadCloud, Briefcase, Database
 } from 'lucide-react';
 import { runIssueAutomation } from '../utils/automation'; 
 import { db } from '../firebase';
@@ -77,7 +77,6 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
   const [formTags, setFormTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [notifyTelegram, setNotifyTelegram] = useState(true);
-  const [notifyEmail, setNotifyEmail] = useState(false);
   
   // New Form Fields
   const [formResponsibleDept, setFormResponsibleDept] = useState('');
@@ -89,9 +88,7 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
     responsibleDepartments: [],
     cascadeData: [],
     severities: DEFAULT_SEVERITIES,
-    telegram: { botToken: '', chatIds: [] }, 
-    googleSheetUrl: '',
-    email: { enabled: false, recipient: '' }
+    telegram: { botToken: '', chats: [] }
   });
 
   useEffect(() => {
@@ -102,9 +99,7 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
               responsibleDepartments: settings.responsibleDepartments || [],
               cascadeData: settings.cascadeData || [],
               severities: settings.severities && settings.severities.length > 0 ? settings.severities : DEFAULT_SEVERITIES,
-              telegram: settings.telegram || { botToken: '', chatIds: [] },
-              googleSheetUrl: settings.googleSheetUrl || '',
-              email: settings.email || { enabled: false, recipient: '' }
+              telegram: settings.telegram || { botToken: '', chats: [] }
           });
       }
   }, [settings]);
@@ -401,7 +396,7 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
           setFormStart(formatToLocalDatetime(issue.scheduledStart)); 
           setFormEnd(formatToLocalDatetime(issue.scheduledEnd));
           setFormZones(issue.affectedZones || []); setFormTags(issue.tags || []);
-          setNotifyTelegram(issue.notifyTelegram); setNotifyEmail(issue.notifyEmail || false);
+          setNotifyTelegram(issue.notifyTelegram);
           setFormResponsibleDept(issue.responsibleDepartment || '');
           // Map stored values to form state keys (l1, l2...)
           const cv = issue.cascadeValues as any || {};
@@ -419,7 +414,7 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
           const firstCat = Object.keys(localSettings.categories)[0] || '';
           setFormCategory(firstCat); setFormSubcategory(localSettings.categories[firstCat]?.[0] || '');
           setFormStart(''); setFormEnd(''); setFormZones([]); setFormTags([]);
-          setNotifyTelegram(true); setNotifyEmail(localSettings.email?.enabled || false);
+          setNotifyTelegram(true);
           setFormResponsibleDept('');
           setFormCascade({l1:'',l2:'',l3:'',l4:'',l5:''});
       }
@@ -432,10 +427,26 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
   };
 
   const handleTestTg = async () => {
-      if (!localSettings.googleSheetUrl) return alert('URL не задан');
+      if (!localSettings.telegram?.botToken || !localSettings.telegram?.chats || localSettings.telegram.chats.length === 0) return alert('Telegram не настроен');
       setIsTestingTg(true);
       try {
-          await fetch(localSettings.googleSheetUrl, { method: 'POST', mode: 'no-cors', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id:'test_1', title:'Тест связи', description:'Проверка интеграции', status:'open', severity:'info', category:'System', notifyTelegram:true, authorName:currentUser.name})});
+          await fetch('/api/issues/notify', { 
+              method: 'POST', 
+              headers: {'Content-Type': 'application/json'}, 
+              body: JSON.stringify({
+                  issue: {
+                      id:'test_1', 
+                      title:'Тест связи', 
+                      description:'Проверка интеграции', 
+                      status:'open', 
+                      severity:'info', 
+                      category:'System', 
+                      notifyTelegram:true, 
+                      authorName:currentUser.name
+                  },
+                  eventType: 'created'
+              })
+          });
           alert('Запрос отправлен');
       } catch (e) { alert('Ошибка'); } finally { setIsTestingTg(false); }
   };
@@ -600,7 +611,7 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
           title: formTitle, description: formDesc, severity: formSeverity, category: formCategory, subcategory: formSubcategory,
           tags: formTags, affectedZones: formZones, status, 
           scheduledStart: start.toISOString(), scheduledEnd: end?.toISOString(),
-          notifyTelegram, notifyEmail, 
+          notifyTelegram, 
           responsibleDepartment: formResponsibleDept,
           // Pass as is, the script will handle 'l1' keys
           cascadeValues: {
@@ -620,18 +631,14 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
       };
 
       if (editingIssue) onUpdateIssue(payload); else onCreateIssue(payload);
-      if (localSettings.googleSheetUrl) {
-          // Augment payload with readable severity label for Google Apps Script
+      if (localSettings.telegram?.botToken && localSettings.telegram?.chats?.length > 0) {
           const severityLabel = getSeverityLabel(formSeverity);
-          fetch(localSettings.googleSheetUrl, { 
+          fetch('/api/issues/notify', { 
               method: 'POST', 
-              mode: 'no-cors', 
               headers: {'Content-Type': 'application/json'}, 
               body: JSON.stringify({
-                  ...payload, 
-                  severityLabel, // Pass human readable label
-                  eventType: editingIssue ? 'updated' : 'created', 
-                  emailRecipient: (payload.notifyEmail && localSettings.email?.enabled) ? localSettings.email.recipient : null
+                  issue: { ...payload, severityLabel },
+                  eventType: editingIssue ? 'updated' : 'created'
               })
           });
       }
@@ -650,17 +657,14 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
           notifiedEvents: Array.from(new Set([...notified, 'auto_end'])) 
       };
       onUpdateIssue(updated);
-      if (localSettings.googleSheetUrl) {
+      if (localSettings.telegram?.botToken && localSettings.telegram?.chats?.length > 0) {
           const severityLabel = getSeverityLabel(updated.severity);
-          fetch(localSettings.googleSheetUrl, { 
+          fetch('/api/issues/notify', { 
             method: 'POST', 
-            mode: 'no-cors', 
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                ...updated, 
-                severityLabel,
-                eventType: 'auto_end', 
-                emailRecipient: (updated.notifyEmail && localSettings.email?.enabled) ? localSettings.email.recipient : null
+                issue: { ...updated, severityLabel },
+                eventType: 'auto_end'
             })
           });
       }
@@ -1008,28 +1012,47 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
 
                     {/* Главная интеграция */}
                     <div className="lg:col-span-2 bg-white dark:bg-zinc-900 rounded-3xl border-2 dark:border-zinc-800 p-4 space-y-6 shadow-sm">
-                        <h3 className="text-lg font-black uppercase tracking-tight dark:text-white flex items-center gap-2"><Table size={20} className="text-green-600"/> Главная интеграция (Google Apps Script)</h3>
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-black text-zinc-400 uppercase ml-2 tracking-widest">Web App URL (Telegram + Email)</label>
-                            <div className="flex gap-4">
-                                <input value={localSettings.googleSheetUrl} onChange={e=>setLocalSettings({...localSettings, googleSheetUrl:e.target.value})} className="flex-1 p-3 bg-zinc-50 dark:bg-zinc-800 border-2 dark:border-zinc-700 rounded-2xl outline-none text-xs font-mono dark:text-zinc-300" placeholder="https://script.google.com/macros/s/.../exec" />
-                                <button onClick={handleTestTg} disabled={isTestingTg} className="px-8 bg-primary text-white rounded-2xl text-xs font-black uppercase shadow-lg flex items-center gap-2 hover:bg-primary-600 transition-all">{isTestingTg ? <RefreshCw className="animate-spin" size={16}/> : <Send size={16}/>} Тест</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Email Settings */}
-                    <div className="lg:col-span-2 bg-white dark:bg-zinc-900 rounded-3xl border-2 dark:border-zinc-800 p-4 space-y-6 shadow-sm">
-                        <h3 className="text-lg font-black uppercase tracking-tight dark:text-white flex items-center gap-2"><Mail size={20} className="text-purple-600"/> Настройка Email Уведомлений</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                        <h3 className="text-lg font-black uppercase tracking-tight dark:text-white flex items-center gap-2"><Send size={20} className="text-blue-500"/> Настройка Telegram</h3>
+                        <div className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-zinc-400 uppercase ml-2 tracking-widest">Email Получателя</label>
-                                <input value={localSettings.email?.recipient} onChange={e=>setLocalSettings({...localSettings, email:{...(localSettings.email||{enabled:false}), recipient:e.target.value}})} className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border-2 dark:border-zinc-700 rounded-2xl outline-none text-xs font-bold dark:text-white" placeholder="например, support@bank.kg" />
+                                <label className="text-[10px] font-black text-zinc-400 uppercase ml-2 tracking-widest">Токен Бота</label>
+                                <input value={localSettings.telegram?.botToken || ''} onChange={e=>setLocalSettings({...localSettings, telegram: {...(localSettings.telegram || {chats:[]}), botToken: e.target.value}})} className="w-full p-3 bg-zinc-50 dark:bg-zinc-800 border-2 dark:border-zinc-700 rounded-2xl outline-none text-xs font-mono dark:text-zinc-300" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" />
                             </div>
-                            <label className="flex items-center gap-3 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border-2 dark:border-zinc-700 cursor-pointer group hover:border-primary transition-all">
-                                <input type="checkbox" checked={localSettings.email?.enabled} onChange={e=>setLocalSettings({...localSettings, email:{...(localSettings.email||{recipient:''}), enabled:e.target.checked}})} className="w-6 h-6 accent-primary" />
-                                <span className="text-sm font-black uppercase text-zinc-700 dark:text-zinc-200">Включить отправку Email по умолчанию</span>
-                            </label>
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-[10px] font-black text-zinc-400 uppercase ml-2 tracking-widest">Группы (Чаты)</label>
+                                    <button onClick={() => setLocalSettings({...localSettings, telegram: {...(localSettings.telegram || {botToken:''}), chats: [...(localSettings.telegram?.chats || []), {chatId:'', threadId:''}]}})} className="text-[10px] font-bold text-primary uppercase hover:underline">+ Добавить чат</button>
+                                </div>
+                                {(localSettings.telegram?.chats || []).map((chat, idx) => (
+                                    <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                                        <div className="col-span-5">
+                                            <input value={chat.chatId} onChange={e => {
+                                                const newChats = [...(localSettings.telegram?.chats || [])];
+                                                newChats[idx].chatId = e.target.value;
+                                                setLocalSettings({...localSettings, telegram: {...localSettings.telegram, chats: newChats}});
+                                            }} className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border-2 dark:border-zinc-700 rounded-xl outline-none text-xs font-mono dark:text-zinc-300" placeholder="ID Чата (-100...)" />
+                                        </div>
+                                        <div className="col-span-6">
+                                            <input value={chat.threadId || ''} onChange={e => {
+                                                const newChats = [...(localSettings.telegram?.chats || [])];
+                                                newChats[idx].threadId = e.target.value;
+                                                setLocalSettings({...localSettings, telegram: {...localSettings.telegram, chats: newChats}});
+                                            }} className="w-full p-2 bg-zinc-50 dark:bg-zinc-800 border-2 dark:border-zinc-700 rounded-xl outline-none text-xs font-mono dark:text-zinc-300" placeholder="ID Топика (опц.)" />
+                                        </div>
+                                        <div className="col-span-1 flex justify-end">
+                                            <button onClick={() => {
+                                                const newChats = [...(localSettings.telegram?.chats || [])];
+                                                newChats.splice(idx, 1);
+                                                setLocalSettings({...localSettings, telegram: {...localSettings.telegram, chats: newChats}});
+                                            }} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"><Trash2 size={14}/></button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {(!localSettings.telegram?.chats || localSettings.telegram.chats.length === 0) && (
+                                    <div className="text-xs text-zinc-500 italic px-2">Нет добавленных чатов. Нажмите "+ Добавить чат".</div>
+                                )}
+                            </div>
+                            <button onClick={handleTestTg} disabled={isTestingTg} className="px-8 py-3 bg-primary text-white rounded-2xl text-xs font-black uppercase shadow-lg flex items-center justify-center gap-2 hover:bg-primary-600 transition-all w-full">{isTestingTg ? <RefreshCw className="animate-spin" size={16}/> : <Send size={16}/>} Тест Telegram</button>
                         </div>
                     </div>
                 </div>
@@ -1147,7 +1170,6 @@ const MassIssuesView: React.FC<Props> = ({ issues, settings, currentUser, roles,
 
                             <div className="flex gap-6 pt-4 border-t dark:border-zinc-800">
                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={notifyTelegram} onChange={e=>setNotifyTelegram(e.target.checked)} className="w-5 h-5 accent-primary"/><span className="text-xs font-black uppercase dark:text-white">В Telegram</span></label>
-                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={notifyEmail} onChange={e=>setNotifyEmail(e.target.checked)} className="w-5 h-5 accent-primary"/><span className="text-xs font-black uppercase dark:text-white">На Email</span></label>
                             </div>
                         </form>
 
