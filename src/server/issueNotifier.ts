@@ -43,49 +43,55 @@ export async function notifyIssueTelegram(issue: MassIssue, eventType: string) {
 
     let msg = "";
 
+    const formatD = (d: any) => {
+      try { 
+        return d ? new Date(d).toLocaleString("ru-RU", {timeZone: "Asia/Bishkek", hour:'2-digit', minute:'2-digit', day:'numeric', month:'short'}) : "-"; 
+      } catch (e) { return "-"; }
+    };
+
+    const zones = Array.isArray(issue.affectedZones) ? issue.affectedZones.join(", ") : (issue.affectedZones || "Все системы");
+    const tags = Array.isArray(issue.tags) ? issue.tags.map(t => `#${t.replace(/\s+/g,'')}`).join(" ") : "";
+    const cascadeStr = formatCascadePath(issue.cascadeValues);
+    const severityStr = getSeverityLabel(issue.severity, (issue as any).severityLabel);
+    const titleUpper = (issue.title || "БЕЗ ЗАГОЛОВКА").toUpperCase();
+
+    let statusIcon = "ℹ️"; 
+    if (isClosed) statusIcon = "✅";
+    else if (eventType === 'auto_start') statusIcon = "⚠️"; 
+    else if (issue.status === 'scheduled') statusIcon = "🗓";
+    else if (issue.severity === 'critical') statusIcon = "🚨";
+    else if (issue.severity === 'major') statusIcon = "🟠";
+
     if (isClosed) {
-      msg = `<u><b>ИНЦИДЕНТ ЗАКРЫТ</b></u>\n\n`;
-      msg += `📝 <b>Детали:</b>\n<pre>${issue.description || 'Инцидент успешно устранен.'}</pre>\n`;
+      msg += `<u><b>ИНЦИДЕНТ ЗАКРЫТ</b></u>\n\n`;
+    }
+
+    msg += `<u><b>${statusIcon} ${titleUpper}</b></u>\n`;
+    msg += `<b>${severityStr} | ${(issue.category || "ОБЩЕЕ").toUpperCase()}</b>\n\n`;
+    msg += `🆔 ID: <code>${issue.readableId}</code>\n`;
+    msg += `🕒 Начало: ${formatD(issue.scheduledStart)}\n`;
+    
+    if (isClosed && issue.resolvedAt) {
+        msg += `✅ Завершено: ${formatD(issue.resolvedAt)}\n`;
+    } else if (issue.scheduledEnd) {
+        msg += `⏳ План. устр.: ${formatD(issue.scheduledEnd)}\n`;
+    }
+
+    if (issue.responsibleDepartment) {
+        msg += `🏢 Отдел: <b>${issue.responsibleDepartment}</b>\n`;
+    }
+    msg += `🌍 Зоны: <code>${zones}</code>\n`;
+    msg += `━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📝 <b>Детали:</b>\n<pre>${issue.description || 'Инцидент успешно устранен.'}</pre>\n\n`;
+    
+    if (cascadeStr) {
+        msg += `📍 <b>Тематика:</b>\n<code>${cascadeStr}</code>\n\n`;
+    }
+    
+    if (tags) {
+        msg += `${tags} #OptimaStatus #Hub`;
     } else {
-      let statusIcon = "ℹ️"; 
-      if (eventType === 'auto_start') statusIcon = "⚠️"; 
-      else if (issue.status === 'scheduled') statusIcon = "🗓";
-      else if (issue.severity === 'critical') statusIcon = "🚨";
-      else if (issue.severity === 'major') statusIcon = "🟠";
-
-      const formatD = (d: any) => {
-        try { 
-          return d ? new Date(d).toLocaleString("ru-RU", {timeZone: "Asia/Bishkek", hour:'2-digit', minute:'2-digit', day:'numeric', month:'short'}) : "-"; 
-        } catch (e) { return "-"; }
-      };
-
-      const zones = Array.isArray(issue.affectedZones) ? issue.affectedZones.join(", ") : (issue.affectedZones || "Все системы");
-      const tags = Array.isArray(issue.tags) ? issue.tags.map(t => `#${t.replace(/\s+/g,'')}`).join(" ") : "";
-      const cascadeStr = formatCascadePath(issue.cascadeValues);
-      const severityStr = getSeverityLabel(issue.severity, (issue as any).severityLabel);
-
-      const titleUpper = (issue.title || "БЕЗ ЗАГОЛОВКА").toUpperCase();
-      msg += `<u><b>${statusIcon} ${titleUpper}</b></u>\n`;
-      msg += `<b>${severityStr} | ${(issue.category || "ОБЩЕЕ").toUpperCase()}</b>\n\n`;
-      msg += `🆔 ID: <code>${issue.readableId}</code>\n`;
-      msg += `🕒 Начало: ${formatD(issue.scheduledStart)}\n`;
-      if (issue.scheduledEnd) {
-          msg += `⏳ План. устр.: ${formatD(issue.scheduledEnd)}\n`;
-      }
-      if (issue.responsibleDepartment) {
-          msg += `🏢 Отдел: <b>${issue.responsibleDepartment}</b>\n`;
-      }
-      msg += `🌍 Зоны: <code>${zones}</code>\n`;
-      msg += `━━━━━━━━━━━━━━━━━━\n`;
-      msg += `📝 <b>Детали:</b>\n<pre>${issue.description}</pre>\n\n`;
-      if (cascadeStr) {
-          msg += `📍 <b>Тематика:</b>\n<code>${cascadeStr}</code>\n\n`;
-      }
-      if (tags) {
-          msg += `${tags} #OptimaStatus #Hub`;
-      } else {
-          msg += `#OptimaStatus #Hub`;
-      }
+        msg += `#OptimaStatus #Hub`;
     }
 
     const newTelegramMessageIds: Record<string, string> = { ...(issue.telegramMessageIds || {}) };
@@ -119,7 +125,7 @@ export async function notifyIssueTelegram(issue: MassIssue, eventType: string) {
       }
     }
 
-    if (hasUpdates) {
+    if (hasUpdates && issue.id !== 'test_1') {
       await db.collection('mass_issues').doc(issue.id).update({
         telegramMessageIds: newTelegramMessageIds
       });

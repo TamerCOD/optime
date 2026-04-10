@@ -53,6 +53,7 @@ export async function sendTelegramMessage(botToken: string, chatId: string, text
       }
       if (replyToMessageId) {
         body.reply_to_message_id = parseInt(replyToMessageId);
+        body.allow_sending_without_reply = true;
       }
 
       const response = await fetch(`https://api.telegram.org/bot${cleanBotToken}/sendMediaGroup`, {
@@ -77,6 +78,7 @@ export async function sendTelegramMessage(botToken: string, chatId: string, text
         }
         if (replyToMessageId) {
           markupBody.reply_to_message_id = parseInt(replyToMessageId);
+          markupBody.allow_sending_without_reply = true;
         }
         await fetch(`https://api.telegram.org/bot${cleanBotToken}/sendMessage`, {
           method: 'POST',
@@ -98,6 +100,7 @@ export async function sendTelegramMessage(botToken: string, chatId: string, text
       }
       if (replyToMessageId) {
         body.reply_to_message_id = parseInt(replyToMessageId);
+        body.allow_sending_without_reply = true;
       }
 
       let endpoint = `https://api.telegram.org/bot${cleanBotToken}/sendMessage`;
